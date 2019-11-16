@@ -171,6 +171,8 @@ int node()
     //responderlo enviando los bloques correspondientes
   }
 
+  pthread_join(thread, nullptr);
+
   delete last_block_in_chain;
   return 0;
 }
