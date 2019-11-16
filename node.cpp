@@ -87,8 +87,9 @@ bool validate_block_for_chain(const Block *rBlock, const MPI_Status *status)
 //Envia el bloque minado a todos los nodos
 void broadcast_block(const Block *block)
 {
-  //No enviar a mí mismo
-  //TODO: Completar
+  for (uint i = 0; i < total_nodes; i++)
+    if (i != mpi_rank)
+      MPI_Send(block, 1, *MPI_BLOCK, i, TAG_NEW_BLOCK, MPI_COMM_WORLD);
 }
 
 //Proof of work
@@ -159,10 +160,20 @@ int node()
   pthread_t thread;
   pthread_create(&thread, nullptr, proof_of_work, nullptr);
 
+  Block received_block;
+
   while (true)
   {
-
     //TODO: Recibir mensajes de otros nodos
+    for (uint i = 0; i < total_nodes; i++)
+    {
+      if (i != mpi_rank)
+      {
+        MPI_Recv(&received_block, 1, *MPI_BLOCK, i, TAG_NEW_BLOCK, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        printf("[%d] Recibi el bloque %d que me mando [%d] \n", mpi_rank, received_block.index, i);
+      }
+    }
+
 
     //TODO: Si es un mensaje de nuevo bloque, llamar a la función
     // validate_block_for_chain con el bloque recibido y el estado de MPI
