@@ -161,6 +161,7 @@ int node()
   pthread_create(&thread, nullptr, proof_of_work, nullptr);
 
   Block received_block;
+  MPI_Status status;
 
   while (true)
   {
@@ -169,17 +170,20 @@ int node()
     {
       if (i != mpi_rank)
       {
-        MPI_Recv(&received_block, 1, *MPI_BLOCK, i, TAG_NEW_BLOCK, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        // Si es un mensaje de nuevo bloque, llamar a la función
+        // validate_block_for_chain con el bloque recibido y el estado de MPI
+        MPI_Recv(&received_block, 1, *MPI_BLOCK, i, TAG_NEW_BLOCK, MPI_COMM_WORLD, &status);
         printf("[%d] Recibi el bloque %d que me mando [%d] \n", mpi_rank, received_block.index, i);
+        validate_block_for_chain(&received_block, &status);
+
+        //TODO: Si es un mensaje de pedido de cadena,
+        //responderlo enviando los bloques correspondientes
       }
     }
 
 
-    //TODO: Si es un mensaje de nuevo bloque, llamar a la función
-    // validate_block_for_chain con el bloque recibido y el estado de MPI
 
-    //TODO: Si es un mensaje de pedido de cadena,
-    //responderlo enviando los bloques correspondientes
+
   }
 
   pthread_join(thread, nullptr);
