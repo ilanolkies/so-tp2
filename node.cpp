@@ -100,7 +100,6 @@ void *proof_of_work(void *ptr)
   unsigned int mined_blocks = 0;
   while (true)
   {
-
     block = *last_block_in_chain;
 
     //Preparar nuevo bloque
@@ -119,7 +118,6 @@ void *proof_of_work(void *ptr)
     //Contar la cantidad de ceros iniciales (con el nuevo nonce)
     if (solves_problem(hash_hex_str))
     {
-
       //Verifico que no haya cambiado mientras calculaba
       if (last_block_in_chain->index < block.index)
       {
@@ -157,7 +155,9 @@ int node()
   last_block_in_chain->created_at = static_cast<unsigned long int>(time(NULL));
   memset(last_block_in_chain->previous_block_hash, 0, HASH_SIZE);
 
-  //TODO: Crear thread para minar
+  //Creo thread para minar
+  pthread_t thread;
+  pthread_create(&thread, nullptr, proof_of_work, nullptr);
 
   while (true)
   {
