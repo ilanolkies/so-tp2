@@ -2,3 +2,4 @@ blockchain
 blockchain.dSYM/
 /.idea/
 /cmake-build-debug/
+.vscode/
