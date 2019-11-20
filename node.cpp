@@ -6,12 +6,16 @@
 #include <cstdlib>
 #include <queue>
 #include <atomic>
+#include <mutex>
 #include <mpi.h>
 #include <map>
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
 int total_nodes, mpi_rank;
 Block *last_block_in_chain;
 map<string, Block> node_blocks;
+mutex mu_node;
 
 // Cuando me llega una cadena adelantada, y tengo que pedir los nodos que me faltan
 // Si nos separan más de VALIDATION_BLOCKS bloques de distancia entre las cadenas, se descarta por seguridad
@@ -134,6 +138,7 @@ void *proof_of_work(void *ptr)
     // Contar la cantidad de ceros iniciales (con el nuevo nonce)
     if (solves_problem(hash_hex_str))
     {
+      mu_node.lock();
       // Verifico que no haya cambiado mientras calculaba
       if (last_block_in_chain->index < block.index)
       {
@@ -146,6 +151,7 @@ void *proof_of_work(void *ptr)
         //TODO: Mientras comunico, no responder mensajes de nuevos nodos
         broadcast_block(last_block_in_chain);
       }
+      mu_node.unlock();
     }
   }
 
@@ -189,7 +195,9 @@ int node()
         // validate_block_for_chain con el bloque recibido y el estado de MPI
         MPI_Recv(&received_block, 1, *MPI_BLOCK, i, TAG_NEW_BLOCK, MPI_COMM_WORLD, &status);
         printf("[%d] Recibi el bloque %d que me mando [%d] \n", mpi_rank, received_block.index, i);
+        mu_node.lock();
         validate_block_for_chain(&received_block, &status);
+        mu_node.unlock();
 
         //TODO: Si es un mensaje de pedido de cadena,
         //responderlo enviando los bloques correspondientes
@@ -202,3 +210,4 @@ int node()
   delete last_block_in_chain;
   return 0;
 }
+#pragma clang diagnostic pop
