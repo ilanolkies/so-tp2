@@ -15,7 +15,7 @@
 int total_nodes, mpi_rank;
 Block *last_block_in_chain;
 map<string, Block> node_blocks;
-mutex mu_node;
+mutex mu_node, mu_io_new_block;
 
 // Cuando me llega una cadena adelantada, y tengo que pedir los nodos que me faltan
 // Si nos separan más de VALIDATION_BLOCKS bloques de distancia entre las cadenas, se descarta por seguridad
@@ -148,8 +148,9 @@ void *proof_of_work(void *ptr)
         node_blocks[hash_hex_str] = *last_block_in_chain;
         printf("[%d] Agregué un bloque producido con index %d \n", mpi_rank, last_block_in_chain->index);
 
-        //TODO: Mientras comunico, no responder mensajes de nuevos nodos
+        mu_io_new_block.lock();
         broadcast_block(last_block_in_chain);
+        mu_io_new_block.unlock();
       }
       mu_node.unlock();
     }
@@ -194,10 +195,12 @@ int node()
         // Si es un mensaje de nuevo bloque, llamar a la función
         // validate_block_for_chain con el bloque recibido y el estado de MPI
         MPI_Recv(&received_block, 1, *MPI_BLOCK, i, TAG_NEW_BLOCK, MPI_COMM_WORLD, &status);
+        mu_io_new_block.lock();
         printf("[%d] Recibi el bloque %d que me mando [%d] \n", mpi_rank, received_block.index, i);
         mu_node.lock();
         validate_block_for_chain(&received_block, &status);
         mu_node.unlock();
+        mu_io_new_block.unlock();
 
         //TODO: Si es un mensaje de pedido de cadena,
         //responderlo enviando los bloques correspondientes
