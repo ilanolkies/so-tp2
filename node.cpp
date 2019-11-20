@@ -48,7 +48,7 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status)
   for (size_t i = 0; i < VALIDATION_BLOCKS - 1; i++)
   {
     if (
-      blockchain[i].block_hash != blockchain[i+1].previous_block_hash ||
+      blockchain[i].previous_block_hash != blockchain[i+1].block_hash ||
       blockchain[i].index != blockchain[i+1].index - 1
     )
     {
@@ -211,6 +211,7 @@ int node()
   pthread_create(&thread, nullptr, proof_of_work, nullptr);
 
   Block received_block;
+  char received_hash[HASH_SIZE];
   MPI_Status status;
 
   while (true)
@@ -232,6 +233,14 @@ int node()
 
         //TODO: Si es un mensaje de pedido de cadena,
         //responderlo enviando los bloques correspondientes
+        MPI_Recv(&received_hash, HASH_SIZE, MPI_CHAR, i, TAG_CHAIN_HASH, MPI_COMM_WORLD, &status);
+
+        Block *blockchain = new Block[VALIDATION_BLOCKS];
+        blockchain[0] = node_blocks[received_hash];
+        for (size_t i = 0; i < VALIDATION_BLOCKS - 1; i++)
+          blockchain[i+1] = node_blocks[blockchain[i].previous_block_hash];
+
+        MPI_Send(blockchain, VALIDATION_BLOCKS, *MPI_BLOCK, mpi_rank, TAG_CHAIN_RESPONSE, MPI_COMM_WORLD);
       }
     }
   }
