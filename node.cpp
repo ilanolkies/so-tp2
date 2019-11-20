@@ -163,7 +163,6 @@ void broadcast_block(const Block *block)
 }
 
 // Proof of work
-//TODO: Advertencia: puede tener condiciones de carrera
 void *proof_of_work(void *ptr)
 {
   string hash_hex_str;
@@ -239,7 +238,6 @@ int node()
 
   while (true)
   {
-    //TODO: Recibir mensajes de otros nodos
     for (uint i = 0; i < total_nodes; i++)
     {
       if (i != mpi_rank)
