@@ -35,23 +35,16 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status)
   // Verificar que los bloques recibidos
   // sean válidos y se puedan acoplar a la cadena
 
+  string actual_hash;
+
   // El primer bloque de la lista contiene el hash pedido
   // y el mismo index que el bloque original.
-  if (strcmp(blockchain[0].block_hash, rBlock->block_hash) != 0)
-  {
-    delete []blockchain;
-    return false;
-  }
+  if (strcmp(blockchain[0].block_hash, rBlock->block_hash) != 0) goto end;
 
   // El hash del bloque recibido es igual al calculado
   // por la función block_to_hash.
-  string actual_hash;
   block_to_hash(&blockchain[0], actual_hash);
-  if (blockchain[0].block_hash != actual_hash)
-  {
-    delete []blockchain;
-    return false;
-  }
+  if (blockchain[0].block_hash != actual_hash) goto end;
 
   // Cada bloque siguiente de la lista, contiene el hash
   // definido en previous_block_hash del actual elemento.
@@ -64,11 +57,7 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status)
       actual_hash.compare(blockchain[i+1].block_hash) != 0 ||
       strcmp(blockchain[i].previous_block_hash, blockchain[i+1].block_hash) != 0 ||
       blockchain[i].index != blockchain[i+1].index - 1
-    )
-    {
-      delete []blockchain;
-      return false;
-    }
+    ) goto end;
 
     // Si dentro de los bloques recibidos por alice alguno ya estaba
     // dentro de node_blocks (o el último tiene índice 1)
@@ -93,6 +82,8 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status)
 
   // De lo contrario, descarto la cadena y los nuevos
   // bloques por seguridad.
+
+  end:
   delete[] blockchain;
   return false;
 }
