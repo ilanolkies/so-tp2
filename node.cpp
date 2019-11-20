@@ -21,19 +21,47 @@ mutex mu_node, mu_io_new_block;
 // Si nos separan más de VALIDATION_BLOCKS bloques de distancia entre las cadenas, se descarta por seguridad
 bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status)
 {
-  //TODO: Enviar mensaje TAG_CHAIN_HASH
+  // Enviar mensaje TAG_CHAIN_HASH
+  MPI_Send(rBlock->block_hash, HASH_SIZE, MPI_CHAR, status->MPI_SOURCE, TAG_CHAIN_HASH, MPI_COMM_WORLD);
 
+  // Recibir mensaje TAG_CHAIN_RESPONSE
   Block *blockchain = new Block[VALIDATION_BLOCKS];
+  MPI_Status recv_status;
+  MPI_Recv(blockchain, VALIDATION_BLOCKS, *MPI_BLOCK, status->MPI_SOURCE, TAG_CHAIN_RESPONSE, MPI_COMM_WORLD, &recv_status);
 
-  //TODO: Recibir mensaje TAG_CHAIN_RESPONSE
+  // Verificar que los bloques recibidos
+  // sean válidos y se puedan acoplar a la cadena
+  if (blockchain[0].block_hash != rBlock->block_hash)
+  {
+    delete []blockchain;
+    return false;
+  }
 
-  //TODO: Verificar que los bloques recibidos
-  //sean válidos y se puedan acoplar a la cadena
-  //delete []blockchain;
-  //return true;
+  string actual_hash;
+  block_to_hash(&blockchain[0], actual_hash);
+  if (blockchain[0].block_hash != actual_hash)
+  {
+    delete []blockchain;
+    return false;
+  }
+
+  for (size_t i = 0; i < VALIDATION_BLOCKS - 1; i++)
+  {
+    if (
+      blockchain[i].block_hash != blockchain[i+1].previous_block_hash ||
+      blockchain[i].index != blockchain[i+1].index - 1
+    )
+    {
+      delete []blockchain;
+      return false;
+    }
+  }
+
+  // TODO: Acoplar cadena
+  // delete[] blockchain;
+  // return true;
 
   delete[] blockchain;
-
   return false;
 }
 
