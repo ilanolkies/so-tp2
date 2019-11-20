@@ -29,14 +29,22 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status)
   MPI_Status recv_status;
   MPI_Recv(blockchain, VALIDATION_BLOCKS, *MPI_BLOCK, status->MPI_SOURCE, TAG_CHAIN_RESPONSE, MPI_COMM_WORLD, &recv_status);
 
+	int count;
+	MPI_Get_count(&recv_status, *MPI_BLOCK, &count);
+
   // Verificar que los bloques recibidos
   // sean válidos y se puedan acoplar a la cadena
-  if (blockchain[0].block_hash != rBlock->block_hash)
+
+  // El primer bloque de la lista contiene el hash pedido
+  // y el mismo index que el bloque original.
+  if (strcmp(blockchain[0].block_hash, rBlock->block_hash) != 0)
   {
     delete []blockchain;
     return false;
   }
 
+  // El hash del bloque recibido es igual al calculado
+  // por la función block_to_hash.
   string actual_hash;
   block_to_hash(&blockchain[0], actual_hash);
   if (blockchain[0].block_hash != actual_hash)
@@ -45,22 +53,46 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status)
     return false;
   }
 
-  for (size_t i = 0; i < VALIDATION_BLOCKS - 1; i++)
+  // Cada bloque siguiente de la lista, contiene el hash
+  // definido en previous_block_hash del actual elemento.
+  // Cada bloque siguiente de la lista, contiene el índice
+  // anterior al actual elemento.
+  for (size_t i = 0; i < count - 1; i++)
   {
+    block_to_hash(&blockchain[i+1], actual_hash);
     if (
-      blockchain[i].previous_block_hash != blockchain[i+1].block_hash ||
+      actual_hash.compare(blockchain[i+1].block_hash) != 0 ||
+      strcmp(blockchain[i].previous_block_hash, blockchain[i+1].block_hash) != 0 ||
       blockchain[i].index != blockchain[i+1].index - 1
     )
     {
       delete []blockchain;
       return false;
     }
+
+    // Si dentro de los bloques recibidos por alice alguno ya estaba
+    // dentro de node_blocks (o el último tiene índice 1)
+    if (
+      node_blocks.find(blockchain[i].block_hash) != node_blocks.end() ||
+      blockchain[i].index == 1
+    )
+    {
+      // Agrego todos los bloques anteriores a node_blocks y marco el primero
+      // como el nuevo último bloque de la cadena (last_block_in_chain).
+      for (size_t j = 0; j < i; j++)
+        node_blocks[blockchain[j].block_hash] = blockchain[j];
+
+      Block *new_last_block = new Block;
+      *new_last_block = blockchain[0];
+      last_block_in_chain = new_last_block;
+
+      delete[] blockchain;
+      return true;
+    }
   }
 
-  // TODO: Acoplar cadena
-  // delete[] blockchain;
-  // return true;
-
+  // De lo contrario, descarto la cadena y los nuevos
+  // bloques por seguridad.
   delete[] blockchain;
   return false;
 }
@@ -231,8 +263,8 @@ int node()
         mu_node.unlock();
         mu_io_new_block.unlock();
 
-        //TODO: Si es un mensaje de pedido de cadena,
-        //responderlo enviando los bloques correspondientes
+        // Si es un mensaje de pedido de cadena,
+        // responderlo enviando los bloques correspondientes
         MPI_Recv(&received_hash, HASH_SIZE, MPI_CHAR, i, TAG_CHAIN_HASH, MPI_COMM_WORLD, &status);
 
         Block *blockchain = new Block[VALIDATION_BLOCKS];
