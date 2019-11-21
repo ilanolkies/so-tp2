@@ -35,6 +35,9 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status) {
   string actual_hash;
 
   MPI_Get_count(&recv_status, *MPI_BLOCK, &count);
+
+  printf("[%d] Recibí %d bloques enviados por %d \n", mpi_rank, count, status->MPI_SOURCE);
+
   if (count <= 0)
     goto end;
 
@@ -73,6 +76,8 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status) {
       // como el nuevo último bloque de la cadena (last_block_in_chain).
       for (size_t j = 0; j <= i; j++)
         node_blocks[blockchain[j].block_hash] = blockchain[j];
+
+      printf("[%d] Agregué %zu bloques de los que me mandó %d \n", mpi_rank, i, status->MPI_SOURCE);
 
       Block *new_last_block = new Block;
       *new_last_block = blockchain[0];
