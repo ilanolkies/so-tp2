@@ -203,7 +203,9 @@ void *proof_of_work(void *ptr) {
       break;
   }
 
-  return NULL;
+
+  printf("[%d] Thread Minero terminó \n", mpi_rank);
+  return nullptr;
 }
 
 int node() {
@@ -246,12 +248,16 @@ int node() {
   //Primer recieve no bloqueante de broadcast de bloques
   MPI_Irecv(&blockbuffer, 1, *MPI_BLOCK, MPI_ANY_SOURCE, TAG_NEW_BLOCK, MPI_COMM_WORLD, &blockRequest);
 
-  while (true) {
+  // variable para esperar almenos tantos ciclos para terminar
+  uint cant_wait = 0;
+
+  while (cant_wait < 50000) {
     MPI_Test(&hashRequest, &hashFlag, &hashStatus);
 
     //Si es un mensaje de pedido de cadena,
     //responderlo enviando los bloques correspondientes
     if (hashFlag) {
+      cant_wait = 0;
       auto iter = node_blocks.find(string(hashbuffer));
       int dest = hashStatus.MPI_SOURCE;
       Block *blocks_to_send = new Block[VALIDATION_BLOCKS];
@@ -292,11 +298,12 @@ int node() {
       }
     }
 
-    if (need_to_finish()){
-      break;
+    if (need_to_finish()) {
+      cant_wait++;
     }
-
   }
+
+  printf("[%d] Thread Emisor terminó \n", mpi_rank);
 
   pthread_join(thread, nullptr);
 
@@ -305,7 +312,7 @@ int node() {
 }
 
 bool need_to_finish() {
-  return last_block_in_chain->index >= BLOCKS_TO_MINE + 1;
+  return last_block_in_chain->index >= BLOCKS_TO_MINE;
 }
 
 #pragma clang diagnostic pop
