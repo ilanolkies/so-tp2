@@ -32,21 +32,25 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status) {
            &recv_status);
 
   int count;
+  string actual_hash;
+
   MPI_Get_count(&recv_status, *MPI_BLOCK, &count);
+  if (count <= 0)
+    goto end;
 
   // Verificar que los bloques recibidos
   // sean válidos y se puedan acoplar a la cadena
 
-  string actual_hash;
 
   // El primer bloque de la lista contiene el hash pedido
   // y el mismo index que el bloque original.
-  if (strcmp(blockchain[0].block_hash, rBlock->block_hash) != 0) goto end;
+  if (strcmp(rBlock->block_hash, blockchain[0].block_hash) != 0) goto end;
 
   // El hash del bloque recibido es igual al calculado
   // por la función block_to_hash.
-  block_to_hash(&blockchain[0], actual_hash);
   if (blockchain[0].block_hash != actual_hash) goto end;
+
+  block_to_hash(&(blockchain[0]), actual_hash);
 
   // Cada bloque siguiente de la lista, contiene el hash
   // definido en previous_block_hash del actual elemento.
