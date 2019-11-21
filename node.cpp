@@ -157,9 +157,11 @@ bool validate_block_for_chain(const Block *rBlock, const MPI_Status *status) {
 // Envia el bloque minado a todos los nodos
 void broadcast_block(const Block *block) {
   isBroadcasting = true;
-  for (uint i = 0; i < total_nodes; i++)
-    if (i != mpi_rank)
-      MPI_Send(block, 1, *MPI_BLOCK, i, TAG_NEW_BLOCK, MPI_COMM_WORLD);
+  for (uint i = 0; i < total_nodes; i++) {
+    uint nodeRank = (i + mpi_rank) % total_nodes;
+    if (nodeRank != mpi_rank)
+      MPI_Send(block, 1, *MPI_BLOCK, nodeRank, TAG_NEW_BLOCK, MPI_COMM_WORLD);
+  }
   isBroadcasting = false;
 }
 
