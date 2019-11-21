@@ -46,34 +46,32 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status) {
   // y el mismo index que el bloque original.
   if (strcmp(rBlock->block_hash, blockchain[0].block_hash) != 0) goto end;
 
+  block_to_hash(&(blockchain[0]), actual_hash);
+
+  // Chequeo que el hash del primer bloque este bien
   // El hash del bloque recibido es igual al calculado
   // por la función block_to_hash.
-  if (blockchain[0].block_hash != actual_hash) goto end;
-
-  block_to_hash(&(blockchain[0]), actual_hash);
+  if(actual_hash.compare(blockchain[0].block_hash) != 0)
+    goto end;
 
   // Cada bloque siguiente de la lista, contiene el hash
   // definido en previous_block_hash del actual elemento.
   // Cada bloque siguiente de la lista, contiene el índice
   // anterior al actual elemento.
-  for (size_t i = 0; i < count - 1; i++) {
-    block_to_hash(&blockchain[i + 1], actual_hash);
-    if (
-            actual_hash.compare(blockchain[i + 1].block_hash) != 0 ||
-            strcmp(blockchain[i].previous_block_hash, blockchain[i + 1].block_hash) != 0 ||
-            blockchain[i].index != blockchain[i + 1].index - 1
-            )
+  for (size_t i = 1; i < count; i++) {
+    block_to_hash(&blockchain[i], actual_hash);
+    if (actual_hash.compare(blockchain[i].block_hash) != 0 ||
+        strcmp(blockchain[i-1].previous_block_hash, blockchain[i].block_hash) != 0 ||
+        blockchain[i-1].index != blockchain[i].index + 1)
       goto end;
 
     // Si dentro de los bloques recibidos por alice alguno ya estaba
     // dentro de node_blocks (o el último tiene índice 1)
-    if (
-            node_blocks.find(blockchain[i].block_hash) != node_blocks.end() ||
-            blockchain[i].index == 1
-            ) {
+    if (node_blocks.find(blockchain[i].block_hash) != node_blocks.end() ||
+        blockchain[i].index == 1) {
       // Agrego todos los bloques anteriores a node_blocks y marco el primero
       // como el nuevo último bloque de la cadena (last_block_in_chain).
-      for (size_t j = 0; j < i; j++)
+      for (size_t j = 0; j <= i; j++)
         node_blocks[blockchain[j].block_hash] = blockchain[j];
 
       Block *new_last_block = new Block;
