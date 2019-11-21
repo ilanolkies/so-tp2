@@ -19,7 +19,15 @@ make run
 
 O directo con MPI<sup>1</sup>:
 ```
-mpiexec --oversubscribe -np 4 ./blockchain
+mpiexec --oversubscribe -np CANT_NODOS ./blockchain
+```
+
+- `CANT_NODOS`: cantidad de nodos en la red.
+
+Save logs in file:
+
+```
+mpiexec --oversubscribe -np CANT_NODOS ./blockchain | tee OUT_FILE
 ```
 
 ## Referencias
