@@ -16,7 +16,6 @@ int total_nodes, mpi_rank;
 Block *last_block_in_chain;
 map<string, Block> node_blocks;
 mutex mu_node;
-
 atomic_bool isBroadcasting;
 
 // Cuando me llega una cadena adelantada, y tengo que pedir los nodos que me faltan
@@ -199,6 +198,9 @@ void *proof_of_work(void *ptr) {
       }
       mu_node.unlock();
     }
+
+    if (need_to_finish())
+      break;
   }
 
   return NULL;
@@ -221,6 +223,9 @@ int node() {
   last_block_in_chain->difficulty = DEFAULT_DIFFICULTY;
   last_block_in_chain->created_at = static_cast<unsigned long int>(time(NULL));
   memset(last_block_in_chain->previous_block_hash, 0, HASH_SIZE);
+
+  // Inicializo mis estructuras
+  isBroadcasting = false;
 
   // Creo thread para minar
   pthread_t thread;
@@ -287,9 +292,9 @@ int node() {
       }
     }
 
-//    if (finishedMining()){
-//      break;
-//    }
+    if (need_to_finish()){
+      break;
+    }
 
   }
 
@@ -297,6 +302,10 @@ int node() {
 
   delete last_block_in_chain;
   return 0;
+}
+
+bool need_to_finish() {
+  return last_block_in_chain->index >= BLOCKS_TO_MINE + 1;
 }
 
 #pragma clang diagnostic pop

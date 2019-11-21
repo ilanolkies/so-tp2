@@ -17,5 +17,6 @@ int node();
 bool validate_block_for_chain(const Block *rBlock, const MPI_Status *status);
 bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status);
 bool agregar_como_ultimo_bloque(const Block *rBlock, const MPI_Status *status);
+bool need_to_finish();
 
 #endif // NODE_H
