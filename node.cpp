@@ -15,7 +15,9 @@
 int total_nodes, mpi_rank;
 Block *last_block_in_chain;
 map<string, Block> node_blocks;
-mutex mu_node, mu_io_new_block;
+mutex mu_node;
+
+atomic_bool isBroadcasting;
 
 // Cuando me llega una cadena adelantada, y tengo que pedir los nodos que me faltan
 // Si nos separan más de VALIDATION_BLOCKS bloques de distancia entre las cadenas, se descarta por seguridad
@@ -150,9 +152,11 @@ bool validate_block_for_chain(const Block *rBlock, const MPI_Status *status) {
 
 // Envia el bloque minado a todos los nodos
 void broadcast_block(const Block *block) {
+  isBroadcasting = true;
   for (uint i = 0; i < total_nodes; i++)
     if (i != mpi_rank)
       MPI_Send(block, 1, *MPI_BLOCK, i, TAG_NEW_BLOCK, MPI_COMM_WORLD);
+  isBroadcasting = false;
 }
 
 // Proof of work
@@ -187,9 +191,7 @@ void *proof_of_work(void *ptr) {
         node_blocks[hash_hex_str] = *last_block_in_chain;
         printf("[%d] Agregué un bloque producido con index %d \n", mpi_rank, last_block_in_chain->index);
 
-        mu_io_new_block.lock();
         broadcast_block(last_block_in_chain);
-        mu_io_new_block.unlock();
       }
       mu_node.unlock();
     }
@@ -268,16 +270,18 @@ int node() {
 
     //Si es un mensaje de nuevo bloque, llamar a la función
     // validate_block_for_chain con el bloque recibido y el estado de MPI
-    mu_io_new_block.lock();
-    MPI_Test(&blockRequest, &blockFlag, &blockStatus);
-    if (blockFlag) {
-      mu_node.lock();
-      validate_block_for_chain(&blockbuffer, &blockStatus);
-      mu_node.unlock();
-      blockFlag = false;
-      MPI_Irecv(&blockbuffer, 1, *MPI_BLOCK, MPI_ANY_SOURCE, TAG_NEW_BLOCK, MPI_COMM_WORLD, &blockRequest);
+    if (!isBroadcasting) {
+      // Si se esta broadcasteando un nodo, evito procesar bloques enviados
+      // por otros nodos hasta que termine el broadcast
+      MPI_Test(&blockRequest, &blockFlag, &blockStatus);
+      if (blockFlag) {
+        mu_node.lock();
+        validate_block_for_chain(&blockbuffer, &blockStatus);
+        mu_node.unlock();
+        blockFlag = false;
+        MPI_Irecv(&blockbuffer, 1, *MPI_BLOCK, MPI_ANY_SOURCE, TAG_NEW_BLOCK, MPI_COMM_WORLD, &blockRequest);
+      }
     }
-    mu_io_new_block.unlock();
 
 //    if (finishedMining()){
 //      break;
