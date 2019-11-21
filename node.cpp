@@ -182,30 +182,68 @@ int node()
   pthread_t thread;
   pthread_create(&thread, nullptr, proof_of_work, nullptr);
 
-  Block received_block;
-  MPI_Status status;
+  char hashbuffer[HASH_SIZE];
+  Block blockbuffer;
+  int hashFlag = false;
+  int blockFlag = false;
+  MPI_Status hashStatus;
+  MPI_Status blockStatus;
+  MPI_Request hashRequest;
+  MPI_Request blockRequest;
+
+  //Primer recieve no bloqueante de pedidos de hash
+  MPI_Irecv(hashbuffer, HASH_SIZE, MPI_CHAR, MPI_ANY_SOURCE, TAG_CHAIN_HASH, MPI_COMM_WORLD, &hashRequest);
+
+  //Primer recieve no bloqueante de broadcast de bloques
+  MPI_Irecv(&blockbuffer, 1, *MPI_BLOCK, MPI_ANY_SOURCE, TAG_NEW_BLOCK, MPI_COMM_WORLD, &blockRequest);
 
   while (true)
   {
-    //TODO: Recibir mensajes de otros nodos
-    for (uint i = 0; i < total_nodes; i++)
-    {
-      if (i != mpi_rank)
-      {
-        // Si es un mensaje de nuevo bloque, llamar a la función
-        // validate_block_for_chain con el bloque recibido y el estado de MPI
-        MPI_Recv(&received_block, 1, *MPI_BLOCK, i, TAG_NEW_BLOCK, MPI_COMM_WORLD, &status);
-        mu_io_new_block.lock();
-        printf("[%d] Recibi el bloque %d que me mando [%d] \n", mpi_rank, received_block.index, i);
-        mu_node.lock();
-        validate_block_for_chain(&received_block, &status);
-        mu_node.unlock();
-        mu_io_new_block.unlock();
+    MPI_Test(&hashRequest, &hashFlag, &hashStatus);
 
-        //TODO: Si es un mensaje de pedido de cadena,
-        //responderlo enviando los bloques correspondientes
+    //Si es un mensaje de pedido de cadena,
+    //responderlo enviando los bloques correspondientes
+    if(hashFlag){
+      auto iter = node_blocks.find(string(hashbuffer));
+      int dest = hashStatus.MPI_SOURCE;
+      Block* blocks_to_send = new Block[VALIDATION_BLOCKS];
+      Block current_block;
+      if(iter == node_blocks.end()){
+        goto restartHash;
       }
+      current_block = iter->second;
+
+      for (int i = 0; i < VALIDATION_BLOCKS && current_block.index!= 0; i++) {
+        blocks_to_send[i] = current_block;
+        current_block = node_blocks[current_block.previous_block_hash];
+      }
+
+
+      MPI_Send(blocks_to_send, VALIDATION_BLOCKS, *MPI_BLOCK, dest, TAG_CHAIN_RESPONSE, MPI_COMM_WORLD);
+
+      restartHash:
+      delete []blocks_to_send;
+      hashFlag = false;
+
+      //Primer receive no bloqueante de pedidos de hash
+      MPI_Irecv(hashbuffer, HASH_SIZE, MPI_CHAR, MPI_ANY_SOURCE, TAG_CHAIN_HASH, MPI_COMM_WORLD, &hashRequest);
     }
+
+    //Si es un mensaje de nuevo bloque, llamar a la función
+    // validate_block_for_chain con el bloque recibido y el estado de MPI
+
+    MPI_Test(&blockRequest, &blockFlag, &blockStatus);
+    if(blockFlag){
+      validate_block_for_chain(&blockbuffer, &blockStatus);
+
+      blockFlag = false;
+      MPI_Irecv(&blockbuffer, 1, *MPI_BLOCK, MPI_ANY_SOURCE, TAG_NEW_BLOCK, MPI_COMM_WORLD, &blockRequest);
+    }
+
+//    if (finishedMining()){
+//      break;
+//    }
+
   }
 
   pthread_join(thread, nullptr);
