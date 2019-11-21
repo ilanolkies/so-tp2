@@ -236,7 +236,6 @@ int node() {
   MPI_Irecv(&blockbuffer, 1, *MPI_BLOCK, MPI_ANY_SOURCE, TAG_NEW_BLOCK, MPI_COMM_WORLD, &blockRequest);
 
   while (true) {
-    mu_io_new_block.lock();
     MPI_Test(&hashRequest, &hashFlag, &hashStatus);
 
     //Si es un mensaje de pedido de cadena,
@@ -266,7 +265,6 @@ int node() {
       //Primer receive no bloqueante de pedidos de hash
       MPI_Irecv(hashbuffer, HASH_SIZE, MPI_CHAR, MPI_ANY_SOURCE, TAG_CHAIN_HASH, MPI_COMM_WORLD, &hashRequest);
     }
-    mu_io_new_block.unlock();
 
     //Si es un mensaje de nuevo bloque, llamar a la función
     // validate_block_for_chain con el bloque recibido y el estado de MPI
