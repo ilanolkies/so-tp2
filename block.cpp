@@ -108,12 +108,12 @@ string block_to_str(const Block *block)
 }
 
 //Contar el número de ceros en la representación binaria del hash
-bool solves_problem(const string &hash)
+bool solves_problem(const string &hash, size_t difficulty)
 {
   //cout << "El hash en hexagesimal: " << hash << endl;
   //cout << "El hash en binario:" << hex_str_to_bin_str(hash) << endl;
-  string start = string(DEFAULT_DIFFICULTY, '0');
-  return hex_str_to_bin_str(hash).compare(0, DEFAULT_DIFFICULTY, start) == 0;
+  string start = string(difficulty, '0');
+  return hex_str_to_bin_str(hash).compare(0, difficulty, start) == 0;
 }
 
 //Aca definimos el tipo de datos MPI_BLOCK para MPI

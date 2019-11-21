@@ -13,7 +13,7 @@ extern MPI_Datatype *MPI_BLOCK;
 
 void broadcast_block(const Block *block);
 void *proof_of_work(void *ptr);
-int node();
+int node(int difficulty);
 bool validate_block_for_chain(const Block *rBlock, const MPI_Status *status);
 bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status);
 bool agregar_como_ultimo_bloque(const Block *rBlock, const MPI_Status *status);

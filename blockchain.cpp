@@ -30,8 +30,11 @@ int main(int argc, char **argv)
   setbuf(stdout, NULL);
   setbuf(stderr, NULL);
 
+  // Dificultad de la blockchain
+  int difficulty = argc > 1 ? atoi(argv[1]) : 18;
+
   //Llama a la función que maneja cada nodo
-  node();
+  node(difficulty);
 
   // Limpio MPI
   MPI_Finalize();

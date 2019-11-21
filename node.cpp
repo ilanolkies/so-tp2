@@ -12,11 +12,28 @@
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
-int total_nodes, mpi_rank;
+
+// Cantidad total de nodos en la red
+int total_nodes;
+
+// Rank del nodo
+int mpi_rank;
+
+// Blockchain del nodo
 Block *last_block_in_chain;
+
+// DB de bloques del nodo
 map<string, Block> node_blocks;
+
+// Exclusión mutua entre recepción de bloques
+// y agregado de bloques recien minados
 mutex mu_node;
+
+// Evita recibir bloques si acaba de minar uno nuevo
 atomic_bool isBroadcasting;
+
+// Dificultad de la blockchain
+size_t default_defficulty;
 
 // Cuando me llega una cadena adelantada, y tengo que pedir los nodos que me faltan
 // Si nos separan más de VALIDATION_BLOCKS bloques de distancia entre las cadenas, se descarta por seguridad
@@ -34,6 +51,9 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status) {
   string actual_hash;
 
   MPI_Get_count(&recv_status, *MPI_BLOCK, &count);
+
+  printf("[%d] Recibí %d bloques enviados por %d \n", mpi_rank, count, status->MPI_SOURCE);
+
   if (count <= 0)
     goto end;
 
@@ -72,6 +92,8 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status) {
       // como el nuevo último bloque de la cadena (last_block_in_chain).
       for (size_t j = 0; j <= i; j++)
         node_blocks[blockchain[j].block_hash] = blockchain[j];
+
+      printf("[%d] Agregué %zu bloques de los que me mandó %d \n", mpi_rank, i, status->MPI_SOURCE);
 
       Block *new_last_block = new Block;
       *new_last_block = blockchain[0];
@@ -173,7 +195,7 @@ void *proof_of_work(void *ptr) {
     // Preparar nuevo bloque
     block.index += 1;
     block.node_owner_number = mpi_rank;
-    block.difficulty = DEFAULT_DIFFICULTY;
+    block.difficulty = default_defficulty;
     block.created_at = static_cast<unsigned long int>(time(NULL));
     memcpy(block.previous_block_hash, block.block_hash, HASH_SIZE);
 
@@ -184,7 +206,7 @@ void *proof_of_work(void *ptr) {
     block_to_hash(&block, hash_hex_str);
 
     // Contar la cantidad de ceros iniciales (con el nuevo nonce)
-    if (solves_problem(hash_hex_str)) {
+    if (solves_problem(hash_hex_str, default_defficulty)) {
       mu_node.lock();
       // Verifico que no haya cambiado mientras calculaba
       if (last_block_in_chain->index < block.index) {
@@ -208,10 +230,13 @@ void *proof_of_work(void *ptr) {
   return nullptr;
 }
 
-int node() {
+int node(int difficulty) {
   // Tomar valor de mpi_rank y de nodos totales
   MPI_Comm_size(MPI_COMM_WORLD, &total_nodes);
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+
+  // Guardo la difucltad de la blockchain
+  default_defficulty = difficulty;
 
   // La semilla de las funciones aleatorias depende del mpi_ranking
   srand(time(NULL) + mpi_rank);
@@ -222,7 +247,7 @@ int node() {
   // Inicializo el primer bloque
   last_block_in_chain->index = 0;
   last_block_in_chain->node_owner_number = mpi_rank;
-  last_block_in_chain->difficulty = DEFAULT_DIFFICULTY;
+  last_block_in_chain->difficulty = default_defficulty;
   last_block_in_chain->created_at = static_cast<unsigned long int>(time(NULL));
   memset(last_block_in_chain->previous_block_hash, 0, HASH_SIZE);
 
@@ -233,19 +258,22 @@ int node() {
   pthread_t thread;
   pthread_create(&thread, nullptr, proof_of_work, nullptr);
 
-  char hashbuffer[HASH_SIZE];
-  Block blockbuffer;
-  int hashFlag = false;
-  int blockFlag = false;
+  // Recepcion de mensajes de pedido de cadena
   MPI_Status hashStatus;
-  MPI_Status blockStatus;
   MPI_Request hashRequest;
+  char hashbuffer[HASH_SIZE];
+  int hashFlag = false;
+  std::map<string, Block>::iterator found_hash;
+
+  // Recepcion de mensajes de nuevos bloques minados en la red
+  MPI_Status blockStatus;
   MPI_Request blockRequest;
+  Block blockbuffer;
+  Block current_block;
+  int blockFlag = false;
 
-  //Primer recieve no bloqueante de pedidos de hash
+  // Recepcion de cadena antes de empezar para no arrancar perdiendo
   MPI_Irecv(hashbuffer, HASH_SIZE, MPI_CHAR, MPI_ANY_SOURCE, TAG_CHAIN_HASH, MPI_COMM_WORLD, &hashRequest);
-
-  //Primer recieve no bloqueante de broadcast de bloques
   MPI_Irecv(&blockbuffer, 1, *MPI_BLOCK, MPI_ANY_SOURCE, TAG_NEW_BLOCK, MPI_COMM_WORLD, &blockRequest);
 
   // variable para esperar almenos tantos ciclos para terminar
@@ -254,36 +282,35 @@ int node() {
   while (cant_wait < 50000) {
     MPI_Test(&hashRequest, &hashFlag, &hashStatus);
 
-    //Si es un mensaje de pedido de cadena,
-    //responderlo enviando los bloques correspondientes
+    // Si es un mensaje de pedido de cadena,
+    // responderlo enviando los bloques correspondientes
     if (hashFlag) {
       cant_wait = 0;
-      auto iter = node_blocks.find(string(hashbuffer));
-      int dest = hashStatus.MPI_SOURCE;
+      found_hash = node_blocks.find(string(hashbuffer));
+
       Block *blocks_to_send = new Block[VALIDATION_BLOCKS];
-      Block current_block;
-      if (iter == node_blocks.end()) {
-        goto restartHash;
-      }
-      current_block = iter->second;
+
+      if (found_hash == node_blocks.end())
+        goto notFound;
+
+      current_block = found_hash->second;
 
       for (int i = 0; i < VALIDATION_BLOCKS && current_block.index != 0; i++) {
         blocks_to_send[i] = current_block;
         current_block = node_blocks[current_block.previous_block_hash];
       }
 
+      MPI_Send(blocks_to_send, VALIDATION_BLOCKS, *MPI_BLOCK, hashStatus.MPI_SOURCE, TAG_CHAIN_RESPONSE, MPI_COMM_WORLD);
 
-      MPI_Send(blocks_to_send, VALIDATION_BLOCKS, *MPI_BLOCK, dest, TAG_CHAIN_RESPONSE, MPI_COMM_WORLD);
-
-      restartHash:
-      delete[]blocks_to_send;
+      notFound:
+      delete[] blocks_to_send;
       hashFlag = false;
 
-      //Primer receive no bloqueante de pedidos de hash
+      // Vuelvo a recibir pedidos de cadena
       MPI_Irecv(hashbuffer, HASH_SIZE, MPI_CHAR, MPI_ANY_SOURCE, TAG_CHAIN_HASH, MPI_COMM_WORLD, &hashRequest);
     }
 
-    //Si es un mensaje de nuevo bloque, llamar a la función
+    // Si es un mensaje de nuevo bloque, llamar a la función
     // validate_block_for_chain con el bloque recibido y el estado de MPI
     if (!isBroadcasting) {
       // Si se esta broadcasteando un nodo, evito procesar bloques enviados
@@ -293,7 +320,10 @@ int node() {
         mu_node.lock();
         validate_block_for_chain(&blockbuffer, &blockStatus);
         mu_node.unlock();
+
         blockFlag = false;
+
+        // Vuelvo a recibir nuevos bloques
         MPI_Irecv(&blockbuffer, 1, *MPI_BLOCK, MPI_ANY_SOURCE, TAG_NEW_BLOCK, MPI_COMM_WORLD, &blockRequest);
       }
     }

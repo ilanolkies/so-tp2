@@ -3,7 +3,7 @@
 
 #define HASH_SIZE 256
 #define NONCE_SIZE 10
-#define DEFAULT_DIFFICULTY 15
+// #define DEFAULT_DIFFICULTY 18
 #define BLOCKS_TO_MINE 10
 #define VALIDATION_MINUTES 1
 #define VALIDATION_BLOCKS 5
@@ -25,7 +25,7 @@ struct Block
   char block_hash[HASH_SIZE];
 };
 
-bool solves_problem(const string &hash);
+bool solves_problem(const string &hash, size_t difficulty);
 void gen_random_nonce(char *s);
 string block_to_str(const Block *block);
 void block_to_hash(const Block *block, string &result);
