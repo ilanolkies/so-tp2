@@ -29,8 +29,11 @@ map<string, Block> node_blocks;
 // y agregado de bloques recien minados
 mutex mu_node;
 
-//
+// Evita recibir bloques si acaba de minar uno nuevo
 atomic_bool isBroadcasting;
+
+// Dificultad de la blockchain
+size_t default_defficulty;
 
 // Cuando me llega una cadena adelantada, y tengo que pedir los nodos que me faltan
 // Si nos separan más de VALIDATION_BLOCKS bloques de distancia entre las cadenas, se descarta por seguridad
@@ -192,7 +195,7 @@ void *proof_of_work(void *ptr) {
     // Preparar nuevo bloque
     block.index += 1;
     block.node_owner_number = mpi_rank;
-    block.difficulty = DEFAULT_DIFFICULTY;
+    block.difficulty = default_defficulty;
     block.created_at = static_cast<unsigned long int>(time(NULL));
     memcpy(block.previous_block_hash, block.block_hash, HASH_SIZE);
 
@@ -203,7 +206,7 @@ void *proof_of_work(void *ptr) {
     block_to_hash(&block, hash_hex_str);
 
     // Contar la cantidad de ceros iniciales (con el nuevo nonce)
-    if (solves_problem(hash_hex_str)) {
+    if (solves_problem(hash_hex_str, default_defficulty)) {
       mu_node.lock();
       // Verifico que no haya cambiado mientras calculaba
       if (last_block_in_chain->index < block.index) {
@@ -222,10 +225,13 @@ void *proof_of_work(void *ptr) {
   return NULL;
 }
 
-int node() {
+int node(int difficulty) {
   // Tomar valor de mpi_rank y de nodos totales
   MPI_Comm_size(MPI_COMM_WORLD, &total_nodes);
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+
+  // Guardo la difucltad de la blockchain
+  default_defficulty = difficulty;
 
   // La semilla de las funciones aleatorias depende del mpi_ranking
   srand(time(NULL) + mpi_rank);
@@ -236,7 +242,7 @@ int node() {
   // Inicializo el primer bloque
   last_block_in_chain->index = 0;
   last_block_in_chain->node_owner_number = mpi_rank;
-  last_block_in_chain->difficulty = DEFAULT_DIFFICULTY;
+  last_block_in_chain->difficulty = default_defficulty;
   last_block_in_chain->created_at = static_cast<unsigned long int>(time(NULL));
   memset(last_block_in_chain->previous_block_hash, 0, HASH_SIZE);
 
