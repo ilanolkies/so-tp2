@@ -220,9 +220,14 @@ void *proof_of_work(void *ptr) {
       }
       mu_node.unlock();
     }
+
+    if (need_to_finish())
+      break;
   }
 
-  return NULL;
+
+  printf("[%d] Thread Minero terminó \n", mpi_rank);
+  return nullptr;
 }
 
 int node(int difficulty) {
@@ -246,6 +251,9 @@ int node(int difficulty) {
   last_block_in_chain->created_at = static_cast<unsigned long int>(time(NULL));
   memset(last_block_in_chain->previous_block_hash, 0, HASH_SIZE);
 
+  // Inicializo mis estructuras
+  isBroadcasting = false;
+
   // Creo thread para minar
   pthread_t thread;
   pthread_create(&thread, nullptr, proof_of_work, nullptr);
@@ -268,12 +276,16 @@ int node(int difficulty) {
   MPI_Irecv(hashbuffer, HASH_SIZE, MPI_CHAR, MPI_ANY_SOURCE, TAG_CHAIN_HASH, MPI_COMM_WORLD, &hashRequest);
   MPI_Irecv(&blockbuffer, 1, *MPI_BLOCK, MPI_ANY_SOURCE, TAG_NEW_BLOCK, MPI_COMM_WORLD, &blockRequest);
 
-  while (true) {
+  // variable para esperar almenos tantos ciclos para terminar
+  uint cant_wait = 0;
+
+  while (cant_wait < 50000) {
     MPI_Test(&hashRequest, &hashFlag, &hashStatus);
 
     // Si es un mensaje de pedido de cadena,
     // responderlo enviando los bloques correspondientes
     if (hashFlag) {
+      cant_wait = 0;
       found_hash = node_blocks.find(string(hashbuffer));
 
       Block *blocks_to_send = new Block[VALIDATION_BLOCKS];
@@ -315,12 +327,22 @@ int node(int difficulty) {
         MPI_Irecv(&blockbuffer, 1, *MPI_BLOCK, MPI_ANY_SOURCE, TAG_NEW_BLOCK, MPI_COMM_WORLD, &blockRequest);
       }
     }
+
+    if (need_to_finish()) {
+      cant_wait++;
+    }
   }
+
+  printf("[%d] Thread Emisor terminó \n", mpi_rank);
 
   pthread_join(thread, nullptr);
 
   delete last_block_in_chain;
   return 0;
+}
+
+bool need_to_finish() {
+  return last_block_in_chain->index >= BLOCKS_TO_MINE;
 }
 
 #pragma clang diagnostic pop
