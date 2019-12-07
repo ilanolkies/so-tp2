@@ -8,8 +8,11 @@
 #define VALIDATION_MINUTES 1
 #define VALIDATION_BLOCKS 5
 
+#include "block.h"
 #include <string>
 #include <mpi.h>
+#include "picosha2.h"
+#include <cstddef>
 
 using namespace std;
 

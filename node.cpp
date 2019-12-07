@@ -1,14 +1,4 @@
 #include "node.h"
-#include "picosha2.h"
-#include <stdio.h>
-#include <string.h>
-#include <pthread.h>
-#include <cstdlib>
-#include <queue>
-#include <atomic>
-#include <mutex>
-#include <mpi.h>
-#include <map>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
@@ -34,6 +24,9 @@ atomic_bool isBroadcasting;
 
 // Dificultad de la blockchain
 size_t default_defficulty;
+
+ofstream *m_output_file;
+
 
 // Cuando me llega una cadena adelantada, y tengo que pedir los nodos que me faltan
 // Si nos separan más de VALIDATION_BLOCKS bloques de distancia entre las cadenas, se descarta por seguridad
@@ -186,6 +179,7 @@ void broadcast_block(const Block *block) {
 
 // Proof of work
 void *proof_of_work(void *ptr) {
+  auto start_time = chrono::steady_clock::now();
   string hash_hex_str;
   Block block;
   unsigned int mined_blocks = 0;
@@ -207,6 +201,8 @@ void *proof_of_work(void *ptr) {
 
     // Contar la cantidad de ceros iniciales (con el nuevo nonce)
     if (solves_problem(hash_hex_str, default_defficulty)) {
+      auto act_time = chrono::steady_clock::now();
+      *m_output_file << chrono::duration <double, milli>(act_time - start_time).count() << endl;
       mu_node.lock();
       // Verifico que no haya cambiado mientras calculaba
       if (last_block_in_chain->index < block.index) {
@@ -230,13 +226,15 @@ void *proof_of_work(void *ptr) {
   return nullptr;
 }
 
-int node(int difficulty) {
+int node(int difficulty, ofstream* outputfile) {
   // Tomar valor de mpi_rank y de nodos totales
   MPI_Comm_size(MPI_COMM_WORLD, &total_nodes);
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
   // Guardo la difucltad de la blockchain
   default_defficulty = difficulty;
+
+  m_output_file = outputfile;
 
   // La semilla de las funciones aleatorias depende del mpi_ranking
   srand(time(NULL) + mpi_rank);

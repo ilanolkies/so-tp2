@@ -1,9 +1,4 @@
 #include "block.h"
-#include "node.h"
-#include "picosha2.h"
-#include <cstring>
-#include <cstddef>
-#include <string>
 
 using namespace std;
 

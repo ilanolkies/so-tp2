@@ -7,7 +7,7 @@ CC=gcc
 # MPICC=  $(MPIROOT)/bin/mpic++
 MPICC=  mpic++
 INCL= -I$(MPIROOT)/include
-SRCS= node.cpp block.cpp blockchain.cpp
+SRCS=  block.cpp node.cpp blockchain.cpp
 BIN= blockchain
 
 
