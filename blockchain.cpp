@@ -41,7 +41,10 @@ int main(int argc, char **argv) {
 
   //Output file
   ofstream outputFile;
-  outputFile.open(file_name, fstream::in | fstream::out | fstream::trunc);
+  int mpi_rank;
+  MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+  if (mpi_rank == 0)
+    outputFile.open(file_name, fstream::in | fstream::out | fstream::trunc);
   printf("------------------------------------------\n%s %s\n", to_string(total_nodes).c_str(), to_string(difficulty).c_str());
 
   auto startTrain = chrono::steady_clock::now();

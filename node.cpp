@@ -27,6 +27,8 @@ size_t default_defficulty;
 
 ofstream *m_output_file;
 
+chrono::steady_clock::time_point start_time;
+
 
 // Cuando me llega una cadena adelantada, y tengo que pedir los nodos que me faltan
 // Si nos separan más de VALIDATION_BLOCKS bloques de distancia entre las cadenas, se descarta por seguridad
@@ -81,12 +83,19 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status) {
     // dentro de node_blocks (o el último tiene índice 1)
     if (node_blocks.find(blockchain[i].block_hash) != node_blocks.end() ||
         blockchain[i].index == 1) {
+      int cant_blocks_added = blockchain[0].index - last_block_in_chain->index;
+      for (int k = 0; k < cant_blocks_added; k++) {
+        auto act_time = chrono::steady_clock::now();
+        if (mpi_rank == 0)
+          *m_output_file << chrono::duration <double, milli>(act_time - start_time).count() << endl;
+      }
+
       // Agrego todos los bloques anteriores a node_blocks y marco el primero
       // como el nuevo último bloque de la cadena (last_block_in_chain).
       for (size_t j = 0; j <= i; j++)
         node_blocks[blockchain[j].block_hash] = blockchain[j];
 
-      printf("[%d] Agregué %zu bloques de los que me mandó %d \n", mpi_rank, i, status->MPI_SOURCE);
+      printf("[%d] Agregué %zu bloques de los que me mandó %d \n", mpi_rank, cant_blocks_added, status->MPI_SOURCE);
 
       Block *new_last_block = new Block;
       *new_last_block = blockchain[0];
@@ -107,6 +116,9 @@ bool verificar_y_migrar_cadena(const Block *rBlock, const MPI_Status *status) {
 
 bool agregar_como_ultimo_bloque(const Block *rBlock, const MPI_Status *status) {
   memcpy(last_block_in_chain, rBlock, sizeof(Block));
+  auto act_time = chrono::steady_clock::now();
+  if (mpi_rank == 0)
+    *m_output_file << chrono::duration <double, milli>(act_time - start_time).count() << endl;
   printf("[%d] Agregado a la lista bloque con index %d enviado por %d \n", mpi_rank, rBlock->index, status->MPI_SOURCE);
   return true;
 }
@@ -179,7 +191,6 @@ void broadcast_block(const Block *block) {
 
 // Proof of work
 void *proof_of_work(void *ptr) {
-  auto start_time = chrono::steady_clock::now();
   string hash_hex_str;
   Block block;
   unsigned int mined_blocks = 0;
@@ -201,11 +212,12 @@ void *proof_of_work(void *ptr) {
 
     // Contar la cantidad de ceros iniciales (con el nuevo nonce)
     if (solves_problem(hash_hex_str, default_defficulty)) {
-      auto act_time = chrono::steady_clock::now();
-      *m_output_file << chrono::duration <double, milli>(act_time - start_time).count() << endl;
       mu_node.lock();
       // Verifico que no haya cambiado mientras calculaba
       if (last_block_in_chain->index < block.index) {
+        auto act_time = chrono::steady_clock::now();
+        if (mpi_rank == 0)
+          *m_output_file << chrono::duration <double, milli>(act_time - start_time).count() << endl;
         mined_blocks += 1;
         *last_block_in_chain = block;
         strcpy(last_block_in_chain->block_hash, hash_hex_str.c_str());
@@ -227,6 +239,8 @@ void *proof_of_work(void *ptr) {
 }
 
 int node(int difficulty, ofstream* outputfile) {
+  start_time = chrono::steady_clock::now();
+
   // Tomar valor de mpi_rank y de nodos totales
   MPI_Comm_size(MPI_COMM_WORLD, &total_nodes);
   MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
